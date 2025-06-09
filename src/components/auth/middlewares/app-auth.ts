@@ -32,6 +32,7 @@ export const appAuth = async (req: Request, res: Response, next: NextFunction) =
                     sessionId,
                     accessToken,
                     roles,
+                    claims: ''
                 });
 
                 // for ctx info

@@ -8,6 +8,7 @@ import {initSwagger} from './components/api-docs';
 import {ctxInfo, finalRequestHandler} from './components/middlewares';
 import {initTemporal} from './components/temporal/utils';
 import {appAuth} from './components/auth/middlewares/app-auth';
+import {rpcAuth} from './components/auth/middlewares/rpc-auth';
 import {registry} from './registry';
 import {getAppRoutes} from './routes';
 import {setRegistryToContext} from './components/app-context';
@@ -24,6 +25,8 @@ if (nodekit.config.appDevMode) {
 
 if (nodekit.config.isAuthEnabled) {
     nodekit.config.appAuthHandler = appAuth;
+} else {
+    nodekit.config.appAuthHandler = rpcAuth;
 }
 
 nodekit.config.appFinalErrorHandler = finalRequestHandler;

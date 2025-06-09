@@ -5,4 +5,5 @@ export interface CtxUser {
     sessionId: string;
     accessToken: string;
     roles: `${UserRole}`[];
+    claims: string | undefined;
 }

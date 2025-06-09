@@ -23,7 +23,7 @@ const config: Partial<AppConfig> = {
     exportDataVerificationKey: getEnvVariable('EXPORT_DATA_VERIFICATION_KEY'),
 
     isAuthEnabled,
-    appAuthPolicy: isAuthEnabled ? AuthPolicy.required : AuthPolicy.disabled,
+    appAuthPolicy: (isAuthEnabled || process.env.NODE_RPC_URL) ? AuthPolicy.required : AuthPolicy.disabled,
     authTokenPublicKey: getEnvCert('AUTH_TOKEN_PUBLIC_KEY'),
 
     multitenant: false,
