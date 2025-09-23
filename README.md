@@ -73,8 +73,8 @@ NODE_RPC_URL=http://host.docker.internal:8088/demo/rpc
 ## Сборка
 <pre>
 docker login -u [username]
-docker build -t akrasnov87/datalens-meta-manager:0.32.0 .
-docker push akrasnov87/datalens-meta-manager:0.32.0
+docker build -t akrasnov87/datalens-meta-manager:0.46.0 .
+docker push akrasnov87/datalens-meta-manager:0.46.0
 </pre>
 
 ## Получение последних изменений с главного репозитория yandex
