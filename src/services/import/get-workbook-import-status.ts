@@ -5,12 +5,13 @@ import {getClient} from '../../components/temporal/client';
 import {getWorkbookImportProgress} from '../../components/temporal/workflows';
 import {checkWorkbookAccessById} from '../../components/us/utils';
 import {META_MANAGER_ERROR} from '../../constants';
-import {ImportModelColumn, ImportStatus, WorkbookImportModel} from '../../db/models';
-import {WorkbookImportNotifications} from '../../db/models/workbook-import/types';
-import {registry} from '../../registry';
+import {ImportModel, ImportModelColumn, ImportStatus} from '../../db/models';
+import {ImportNotifications} from '../../db/models/import/types';
+import {getReplica} from '../../db/utils';
 import {BigIntId} from '../../types';
 import {ServiceArgs} from '../../types/service';
 import {encodeId} from '../../utils';
+import {getCtxTenantIdUnsafe} from '../../utils/ctx';
 
 type GetWorkbookImportStatusArgs = {
     importId: BigIntId;
@@ -20,12 +21,12 @@ export type GetWorkbookImportStatusResult = {
     status: ImportStatus;
     importId: BigIntId;
     progress: number;
-    notifications: WorkbookImportNotifications | null;
+    notifications: ImportNotifications | null;
     workbookId: string;
 };
 
 export const getWorkbookImportStatus = async (
-    {ctx}: ServiceArgs,
+    {ctx, trx}: ServiceArgs,
     args: GetWorkbookImportStatusArgs,
 ): Promise<GetWorkbookImportStatusResult> => {
     const {importId} = args;
@@ -36,13 +37,13 @@ export const getWorkbookImportStatus = async (
         importId: encodedImportId,
     });
 
+    const tenantId = getCtxTenantIdUnsafe(ctx);
+
     const client = await getClient();
     const handle = client.workflow.getHandle(encodedImportId);
     const progress = await handle.query(getWorkbookImportProgress);
 
-    const {db} = registry.getDbInstance();
-
-    const workbookImport = await WorkbookImportModel.query(db.replica)
+    const workbookImport = await ImportModel.query(getReplica(trx))
         .select([
             ImportModelColumn.ImportId,
             ImportModelColumn.Status,
@@ -59,9 +60,10 @@ export const getWorkbookImportStatus = async (
         ])
         .where({
             [ImportModelColumn.ImportId]: importId,
+            [ImportModelColumn.TenantId]: tenantId,
         })
         .first()
-        .timeout(WorkbookImportModel.DEFAULT_QUERY_TIMEOUT);
+        .timeout(ImportModel.DEFAULT_QUERY_TIMEOUT);
 
     if (!workbookImport) {
         throw new AppError(META_MANAGER_ERROR.WORKBOOK_IMPORT_NOT_EXIST, {

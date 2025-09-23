@@ -7,20 +7,21 @@ import {
     WORKBOOK_EXPORT_DATA_VERSION,
     WORKBOOK_EXPORT_EXPIRATION_DAYS,
 } from '../../constants';
-import {WorkbookExportModel} from '../../db/models';
+import {ExportModel} from '../../db/models';
+import {getPrimary} from '../../db/utils';
 import {registry} from '../../registry';
 import {ServiceArgs} from '../../types/service';
 import {encodeId} from '../../utils';
-import {getCtxInfo, getCtxRequestIdWithFallback} from '../../utils/ctx';
+import {getCtxInfo, getCtxRequestIdWithFallback, getCtxTenantIdUnsafe} from '../../utils/ctx';
 
 type StartWorkbookExportArgs = {
     workbookId: string;
 };
 
 export const startWorkbookExport = async (
-    {ctx}: ServiceArgs,
+    {ctx, trx}: ServiceArgs,
     args: StartWorkbookExportArgs,
-): Promise<WorkbookExportModel> => {
+): Promise<ExportModel> => {
     const {workbookId} = args;
 
     ctx.log('START_WORKBOOK_EXPORT_START', {
@@ -30,7 +31,8 @@ export const startWorkbookExport = async (
     const requestId = getCtxRequestIdWithFallback(ctx);
 
     const {gatewayApi} = registry.getGatewayApi();
-    const {tenantId, user} = getCtxInfo(ctx);
+    const {user} = getCtxInfo(ctx);
+    const tenantId = getCtxTenantIdUnsafe(ctx);
 
     const {responseData} = await gatewayApi.us.getWorkbook({
         ctx,
@@ -45,16 +47,17 @@ export const startWorkbookExport = async (
 
     await checkExportAvailability({ctx});
 
-    const {db} = registry.getDbInstance();
-
-    const result = await WorkbookExportModel.query(db.primary)
+    const result = await ExportModel.query(getPrimary(trx))
         .insert({
             createdBy: user.userId ?? SYSTEM_USER.ID,
             expiredAt: raw(`NOW() + INTERVAL '?? DAY'`, [WORKBOOK_EXPORT_EXPIRATION_DAYS]),
-            data: {version: WORKBOOK_EXPORT_DATA_VERSION, entries: {}},
-            meta: {sourceWorkbookId: responseData.workbookId},
+            meta: {
+                version: WORKBOOK_EXPORT_DATA_VERSION,
+                sourceWorkbookId: responseData.workbookId,
+            },
+            tenantId,
         })
-        .timeout(WorkbookExportModel.DEFAULT_QUERY_TIMEOUT);
+        .timeout(ExportModel.DEFAULT_QUERY_TIMEOUT);
 
     await startExportWorkbookWorkflow({
         exportId: result.exportId,

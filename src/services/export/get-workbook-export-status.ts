@@ -5,26 +5,53 @@ import {getClient} from '../../components/temporal/client';
 import {getWorkbookExportProgress} from '../../components/temporal/workflows';
 import {checkWorkbookAccessById} from '../../components/us/utils';
 import {META_MANAGER_ERROR} from '../../constants';
-import {ExportModelColumn, ExportStatus, WorkbookExportModel} from '../../db/models';
-import {WorkbookExportNotifications} from '../../db/models/workbook-export/types';
-import {registry} from '../../registry';
+import {
+    ExportEntryModel,
+    ExportEntryModelColumn,
+    ExportModel,
+    ExportModelColumn,
+    ExportStatus,
+} from '../../db/models';
+import {ExportNotifications} from '../../db/models/export/types';
+import {getReplica} from '../../db/utils';
 import {BigIntId} from '../../types';
 import {ServiceArgs} from '../../types/service';
 import {encodeId} from '../../utils';
+import {getCtxTenantIdUnsafe} from '../../utils/ctx';
 
 type GetWorkbookExportStatusArgs = {
     exportId: BigIntId;
 };
 
+const selectedExportColumns = [
+    ExportModelColumn.ExportId,
+    ExportModelColumn.Status,
+    ExportModelColumn.Meta,
+] as const;
+
+type SelectedExportModel = Pick<ExportModel, ArrayElement<typeof selectedExportColumns>> & {
+    notifications: ExportNotifications | null;
+};
+
+const selectedEntryColumns = [
+    ExportEntryModelColumn.ExportId,
+    ExportEntryModelColumn.EntryId,
+    ExportEntryModelColumn.Scope,
+    ExportEntryModelColumn.Notifications,
+] as const;
+
+type SelectedExportEntryModel = Pick<ExportEntryModel, ArrayElement<typeof selectedEntryColumns>>;
+
 export type GetWorkbookExportStatusResult = {
     status: ExportStatus;
     exportId: BigIntId;
     progress: number;
-    notifications: WorkbookExportNotifications | null;
+    notifications: ExportNotifications | null;
+    entries?: SelectedExportEntryModel[];
 };
 
 export const getWorkbookExportStatus = async (
-    {ctx}: ServiceArgs,
+    {ctx, trx}: ServiceArgs,
     args: GetWorkbookExportStatusArgs,
 ): Promise<GetWorkbookExportStatusResult> => {
     const {exportId} = args;
@@ -35,12 +62,12 @@ export const getWorkbookExportStatus = async (
         exportId: encodedExportId,
     });
 
+    const tenantId = getCtxTenantIdUnsafe(ctx);
+
     const client = await getClient();
     const handle = client.workflow.getHandle(encodedExportId);
 
-    const {db} = registry.getDbInstance();
-
-    const workbookExportPromise = WorkbookExportModel.query(db.replica)
+    const workbookExportPromise = ExportModel.query(getReplica(trx))
         .select([
             ExportModelColumn.ExportId,
             ExportModelColumn.Status,
@@ -57,14 +84,14 @@ export const getWorkbookExportStatus = async (
         ])
         .where({
             [ExportModelColumn.ExportId]: exportId,
+            [ExportModelColumn.TenantId]: tenantId,
         })
         .first()
-        .timeout(WorkbookExportModel.DEFAULT_QUERY_TIMEOUT);
+        .timeout(ExportModel.DEFAULT_QUERY_TIMEOUT);
 
-    const [progress, workbookExport] = await Promise.all([
-        handle.query(getWorkbookExportProgress),
-        workbookExportPromise,
-    ]);
+    const [progress, workbookExport]: [number, SelectedExportModel | undefined] = await Promise.all(
+        [handle.query(getWorkbookExportProgress), workbookExportPromise],
+    );
 
     if (!workbookExport) {
         throw new AppError(META_MANAGER_ERROR.WORKBOOK_EXPORT_NOT_EXIST, {
@@ -76,6 +103,20 @@ export const getWorkbookExportStatus = async (
 
     await checkWorkbookAccessById({ctx, workbookId: sourceWorkbookId});
 
+    let entries: SelectedExportEntryModel[] | undefined;
+
+    if (
+        workbookExport.status === ExportStatus.Error ||
+        workbookExport.status === ExportStatus.Success
+    ) {
+        entries = await ExportEntryModel.query(getReplica(trx))
+            .select(selectedEntryColumns)
+            .where({
+                [ExportEntryModelColumn.ExportId]: exportId,
+            })
+            .timeout(ExportEntryModel.DEFAULT_QUERY_TIMEOUT);
+    }
+
     ctx.log('GET_WORKBOOK_EXPORT_STATUS_FINISH');
 
     return {
@@ -83,5 +124,6 @@ export const getWorkbookExportStatus = async (
         status: workbookExport.status,
         notifications: workbookExport.notifications,
         progress,
+        entries,
     };
 };

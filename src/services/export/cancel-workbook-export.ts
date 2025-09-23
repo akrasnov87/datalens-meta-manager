@@ -3,11 +3,12 @@ import {AppError} from '@gravity-ui/nodekit';
 import {getClient} from '../../components/temporal/client';
 import {checkWorkbookAccessById} from '../../components/us/utils';
 import {META_MANAGER_ERROR} from '../../constants';
-import {ExportModelColumn, WorkbookExportModel} from '../../db/models';
-import {registry} from '../../registry';
+import {ExportModel, ExportModelColumn} from '../../db/models';
+import {getReplica} from '../../db/utils';
 import {BigIntId} from '../../types';
 import {ServiceArgs} from '../../types/service';
 import {encodeId} from '../../utils';
+import {getCtxTenantIdUnsafe} from '../../utils/ctx';
 
 type CancelWorkbookExportArgs = {
     exportId: BigIntId;
@@ -18,7 +19,7 @@ export type CancelWorkbookExportResult = {
 };
 
 export const cancelWorkbookExport = async (
-    {ctx}: ServiceArgs,
+    {ctx, trx}: ServiceArgs,
     args: CancelWorkbookExportArgs,
 ): Promise<CancelWorkbookExportResult> => {
     const {exportId} = args;
@@ -29,15 +30,16 @@ export const cancelWorkbookExport = async (
         exportId: encodedExportId,
     });
 
-    const {db} = registry.getDbInstance();
+    const tenantId = getCtxTenantIdUnsafe(ctx);
 
-    const workbookExport = await WorkbookExportModel.query(db.replica)
+    const workbookExport = await ExportModel.query(getReplica(trx))
         .select([ExportModelColumn.ExportId, ExportModelColumn.Meta])
         .where({
             [ExportModelColumn.ExportId]: exportId,
+            [ExportModelColumn.TenantId]: tenantId,
         })
         .first()
-        .timeout(WorkbookExportModel.DEFAULT_QUERY_TIMEOUT);
+        .timeout(ExportModel.DEFAULT_QUERY_TIMEOUT);
 
     if (!workbookExport) {
         throw new AppError(META_MANAGER_ERROR.WORKBOOK_EXPORT_NOT_EXIST, {

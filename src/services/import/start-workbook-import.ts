@@ -12,13 +12,14 @@ import {
     WORKBOOK_EXPORT_DATA_VERSION,
     WORKBOOK_IMPORT_EXPIRATION_DAYS,
 } from '../../constants';
-import {WorkbookImportModel} from '../../db/models';
+import {ImportModel} from '../../db/models';
+import {getPrimary} from '../../db/utils';
 import {registry} from '../../registry';
 import {BigIntId} from '../../types';
 import {ServiceArgs} from '../../types/service';
 import {WorkbookExportDataWithHash} from '../../types/workbook-export';
 import {encodeId} from '../../utils';
-import {getCtxInfo, getCtxRequestIdWithFallback} from '../../utils/ctx';
+import {getCtxInfo, getCtxRequestIdWithFallback, getCtxTenantIdUnsafe} from '../../utils/ctx';
 import {getExportDataVerificationHash} from '../../utils/export';
 
 type StartWorkbookImportArgs = {
@@ -34,7 +35,7 @@ export type StartWorkbookImportResult = {
 };
 
 export const startWorkbookImport = async (
-    {ctx}: ServiceArgs,
+    {ctx, trx}: ServiceArgs,
     args: StartWorkbookImportArgs,
 ): Promise<StartWorkbookImportResult> => {
     const {data, title, description, collectionId} = args;
@@ -52,8 +53,8 @@ export const startWorkbookImport = async (
     }
 
     const {gatewayApi} = registry.getGatewayApi();
-    const {db} = registry.getDbInstance();
-    const {tenantId, user} = getCtxInfo(ctx);
+    const {user} = getCtxInfo(ctx);
+    const tenantId = getCtxTenantIdUnsafe(ctx);
 
     const requestId = getCtxRequestIdWithFallback(ctx);
 
@@ -83,14 +84,15 @@ export const startWorkbookImport = async (
         throw error;
     }
 
-    const workbookImport = await WorkbookImportModel.query(db.primary)
+    const workbookImport = await ImportModel.query(getPrimary(trx))
         .insert({
             createdBy: user?.userId ?? SYSTEM_USER.ID,
             expiredAt: raw(`NOW() + INTERVAL '?? DAY'`, [WORKBOOK_IMPORT_EXPIRATION_DAYS]),
             meta: {workbookId: workbook.workbookId},
             data: data.export,
+            tenantId,
         })
-        .timeout(WorkbookImportModel.DEFAULT_QUERY_TIMEOUT);
+        .timeout(ImportModel.DEFAULT_QUERY_TIMEOUT);
 
     const encodedImportId = encodeId(workbookImport.importId);
 
