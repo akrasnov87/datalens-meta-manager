@@ -30,7 +30,8 @@
     "db:rollback-one": "node dist/server/db/scripts/rollback-one.js",
     "x--------------------------------------------------------Scripts": "exit 1",
     "decode": "node ./scripts/helpers.js -h=decode",
-    "encode": "node ./scripts/helpers.js -h=encode"
+    "encode": "node ./scripts/helpers.js -h=encode",
+    "build:image": "./build.sh"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.0",

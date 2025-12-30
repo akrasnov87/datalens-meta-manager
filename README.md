@@ -77,6 +77,8 @@ docker build -t akrasnov87/datalens-meta-manager:0.50.0 .
 docker push akrasnov87/datalens-meta-manager:0.50.0
 </pre>
 
+Для сборки так же можно вызвать команду `npm run build:image` (предварительно проверить, что для файла `build.sh` есть права на выполнение `chmod +x build.sh`)
+
 ## Получение последних изменений с главного репозитория yandex
 
 <pre>
