@@ -30,6 +30,9 @@ const config: Partial<AppConfig> = {
     tenantIdOverride: 'common',
 
     appSensitiveHeaders,
+    appSensitiveKeys: appSensitiveHeaders,
+
+    appAuthDisableRedirect: true,
 
     features: {},
 
